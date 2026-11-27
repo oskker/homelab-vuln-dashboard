@@ -1,0 +1,21 @@
+[project]
+name = "homelab-vuln-dashboard"
+version = "0.1.0"
+description = "Self-hosted vulnerability management dashboard for a home lab"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F: errors, I: import order, B: likely bugs, S: security checks (bandit rules), UP: modern syntax
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use assert, fake credentials and long inline XML fixtures.
+"tests/*" = ["S101", "S105", "S106", "E501"]

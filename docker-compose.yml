@@ -1,0 +1,45 @@
+name: homelab-vuln-dashboard
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vulndash
+      POSTGRES_USER: vulndash
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run start.bat, or copy .env.example to .env and set a password}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vulndash -d vulndash"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # No published ports: only the app container can reach the database.
+
+  app:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://vulndash:${POSTGRES_PASSWORD}@db:5432/vulndash
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    ports:
+      # Bound to 127.0.0.1 so the dashboard is reachable from this computer only.
+      - "127.0.0.1:8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  db-data:

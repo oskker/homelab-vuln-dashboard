@@ -1,0 +1,8 @@
+# Keep Linux line endings for everything that runs inside the container,
+# even when the repository is checked out on Windows.
+* text=auto eol=lf
+
+# Windows scripts need Windows line endings.
+*.bat text eol=crlf
+
+*.png binary

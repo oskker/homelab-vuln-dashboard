@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>HomeLab Vuln Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-title">
+      <h1>HomeLab Vuln Dashboard</h1>
+      <p id="scan-meta" class="muted">Loading</p>
+    </div>
+    <div class="topbar-actions">
+      <input id="scan-file" type="file" accept=".nessus,.xml" hidden>
+      <button id="import-button" type="button" class="button primary">Import scan</button>
+      <button id="intel-button" type="button" class="button">Update threat intel</button>
+    </div>
+  </header>
+
+  <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+
+  <main>
+    <section id="empty-state" class="empty" hidden>
+      <h2>No scans yet</h2>
+      <p>Export a scan from Nessus (open the scan, choose Export, then Nessus) and import the
+        .nessus file here. To try the dashboard first, import the two files in the
+        <code>sample-data</code> folder, oldest first.</p>
+      <button id="empty-import" type="button" class="button primary">Import scan</button>
+    </section>
+
+    <div id="dashboard" hidden>
+      <section class="stats" aria-label="Current posture">
+        <dl id="stats"></dl>
+      </section>
+
+      <div class="figures">
+        <figure class="figure" id="severity-figure">
+          <figcaption>
+            <h2>Open findings by severity</h2>
+          </figcaption>
+          <div id="severity-bars" class="hbars"></div>
+        </figure>
+
+        <figure class="figure" id="trend-figure">
+          <figcaption class="figure-head">
+            <h2>Open findings after each scan</h2>
+            <button id="trend-toggle" type="button" class="link-button" aria-pressed="false">Show as table</button>
+          </figcaption>
+          <ul id="trend-legend" class="legend" aria-label="Severity"></ul>
+          <div id="trend-chart" class="chart"></div>
+          <div id="trend-table" class="table-wrap" hidden></div>
+        </figure>
+      </div>
+
+      <section aria-labelledby="hosts-heading">
+        <h2 id="hosts-heading">Hosts</h2>
+        <div class="table-wrap">
+          <table id="hosts-table" class="data">
+            <thead>
+              <tr>
+                <th scope="col">Host</th>
+                <th scope="col" class="hide-narrow">Operating system</th>
+                <th scope="col" title="How much this device matters to you: 1 is a lab toy, 5 holds data you cannot lose. It scales the risk score.">Criticality</th>
+                <th scope="col" class="num">Top risk</th>
+                <th scope="col" class="num"><span class="swatch sev-4"></span>Critical</th>
+                <th scope="col" class="num"><span class="swatch sev-3"></span>High</th>
+                <th scope="col" class="num"><span class="swatch sev-2"></span>Medium</th>
+                <th scope="col" class="num"><span class="swatch sev-1"></span>Low</th>
+                <th scope="col" class="hide-narrow">Open findings</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="worklist-heading">
+        <h2 id="worklist-heading">Fix first</h2>
+        <form id="filters" class="filters">
+          <label>Status
+            <select name="status">
+              <option value="open" selected>Open</option>
+              <option value="fixed">Fixed</option>
+              <option value="all">Open and fixed</option>
+            </select>
+          </label>
+          <label>Severity
+            <select name="min_severity">
+              <option value="4">Critical only</option>
+              <option value="3">High and above</option>
+              <option value="2">Medium and above</option>
+              <option value="1" selected>Low and above</option>
+              <option value="0">Everything, including info</option>
+            </select>
+          </label>
+          <label>Host
+            <select name="host_id">
+              <option value="">All hosts</option>
+            </select>
+          </label>
+          <label>Search
+            <input name="q" type="search" placeholder="Name or CVE" maxlength="100" autocomplete="off">
+          </label>
+          <label class="check">
+            <input name="kev_only" type="checkbox"> Known exploited only
+          </label>
+        </form>
+        <p id="worklist-count" class="muted"></p>
+        <div class="table-wrap">
+          <table id="findings-table" class="data worklist">
+            <thead>
+              <tr>
+                <th scope="col" class="num" title="0 to 100. CVSS, EPSS and the CISA KEV list combined, scaled by host criticality.">Risk</th>
+                <th scope="col">Severity</th>
+                <th scope="col">Finding</th>
+                <th scope="col">Host</th>
+                <th scope="col" class="num hide-narrow">Port</th>
+                <th scope="col" class="num hide-narrow">CVSS</th>
+                <th scope="col" class="num" title="Chance of exploitation in the next 30 days, from FIRST EPSS.">EPSS</th>
+                <th scope="col" title="Listed in the CISA Known Exploited Vulnerabilities catalog.">Exploited</th>
+                <th scope="col" class="num">Age</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button id="load-more" type="button" class="button" hidden>Show more</button>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="detail" class="sheet" aria-labelledby="detail-title">
+    <div class="sheet-head">
+      <h2 id="detail-title"></h2>
+      <button id="detail-close" type="button" class="button">Close</button>
+    </div>
+    <div id="detail-body" class="sheet-body"></div>
+  </dialog>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+  <footer class="muted">
+    <span id="version"></span>
+    <span>Runs on this computer only. Scan data is never sent anywhere.</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

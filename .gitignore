@@ -1,0 +1,24 @@
+# Secrets and local settings: never commit these
+.env
+
+# Real scan exports describe your network. Only the synthetic demo files belong in git.
+*.nessus
+!sample-data/demo-scan-*.nessus
+scans/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Local databases
+*.db
+*.sqlite3
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
