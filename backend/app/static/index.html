@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>HomeLab Vuln Dashboard</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -14,28 +15,37 @@
       <p id="scan-meta" class="muted">Loading</p>
     </div>
     <div class="topbar-actions">
-      <input id="scan-file" type="file" accept=".nessus,.xml,.html,.htm" hidden>
-      <button id="import-button" type="button" class="button primary">Import scan</button>
+      <input id="scan-file" type="file" accept=".xml,.nessus,.html,.htm" multiple hidden>
+      <button id="import-button" type="button" class="button">Import reports</button>
       <button id="intel-button" type="button" class="button">Update threat intel</button>
     </div>
   </header>
+
+  <nav class="tabs" aria-label="Views">
+    <a href="#overview" data-view="overview">Overview</a>
+    <a href="#trends" data-view="trends">Trends</a>
+    <a href="#scans" data-view="scans">Scans</a>
+  </nav>
 
   <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
 
   <main>
     <section id="empty-state" class="empty" hidden>
       <h2>No scans yet</h2>
-      <p>In Nessus Essentials or Essentials Plus, open a finished scan, choose Report, pick
-        the Detailed Vulnerabilities By Host template and import the HTML file here. With
-        Nessus Professional you can import the .nessus export instead.</p>
-      <p>To try the dashboard first, import the three files in the <code>sample-data</code>
-        folder, oldest first.</p>
-      <button id="empty-import" type="button" class="button primary">Import scan</button>
+      <p>Start a scan from the Scans view and finished OpenVAS reports will appear here on
+        their own. You can also import an OpenVAS XML report, or a Nessus export, by hand.</p>
+      <p>To try the dashboard first, import the eight files in the <code>sample-data</code>
+        folder. Select them all at once.</p>
+      <div class="button-row">
+        <a class="button primary" href="#scans">Go to Scans</a>
+        <button id="empty-import" type="button" class="button">Import reports</button>
+      </div>
     </section>
 
-    <div id="dashboard" hidden>
+    <!-- ===================== Overview ===================== -->
+    <div id="view-overview" class="view" hidden>
       <section class="stats" aria-label="Current posture">
-        <dl id="stats"></dl>
+        <dl id="stats" class="stat-row"></dl>
       </section>
 
       <div class="figures">
@@ -46,14 +56,14 @@
           <div id="severity-bars" class="hbars"></div>
         </figure>
 
-        <figure class="figure" id="trend-figure">
+        <figure class="figure" data-toggle id="overview-trend">
           <figcaption class="figure-head">
             <h2>Open findings after each scan</h2>
-            <button id="trend-toggle" type="button" class="link-button" aria-pressed="false">Show as table</button>
+            <button type="button" class="link-button table-toggle" aria-pressed="false">Show as table</button>
           </figcaption>
-          <ul id="trend-legend" class="legend" aria-label="Severity"></ul>
-          <div id="trend-chart" class="chart"></div>
-          <div id="trend-table" class="table-wrap" hidden></div>
+          <ul class="legend severity-legend" aria-label="Severity"></ul>
+          <div class="chart"></div>
+          <div class="table-wrap" hidden></div>
         </figure>
       </div>
 
@@ -71,7 +81,7 @@
                 <th scope="col" class="num"><span class="swatch sev-3"></span>High</th>
                 <th scope="col" class="num"><span class="swatch sev-2"></span>Medium</th>
                 <th scope="col" class="num"><span class="swatch sev-1"></span>Low</th>
-                <th scope="col" class="hide-narrow">Open findings</th>
+                <th scope="col" class="hide-narrow" title="Open findings after each of the last scans of this host">Last scans</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -132,14 +142,192 @@
         <button id="load-more" type="button" class="button" hidden>Show more</button>
       </section>
     </div>
+
+    <!-- ===================== Trends ===================== -->
+    <div id="view-trends" class="view" hidden>
+      <div class="range-row">
+        <div class="segmented" role="group" aria-label="Time range" id="range">
+          <button type="button" data-days="30">30 days</button>
+          <button type="button" data-days="90" aria-pressed="true">90 days</button>
+          <button type="button" data-days="365">1 year</button>
+          <button type="button" data-days="">All time</button>
+        </div>
+        <p id="range-note" class="muted"></p>
+      </div>
+
+      <section class="stats" aria-label="Change over the selected range">
+        <dl id="trend-stats" class="stat-row"></dl>
+      </section>
+
+      <div class="figures halves">
+        <figure class="figure" data-toggle id="trend-open">
+          <figcaption class="figure-head">
+            <h2>Open findings after each scan</h2>
+            <button type="button" class="link-button table-toggle" aria-pressed="false">Show as table</button>
+          </figcaption>
+          <ul class="legend severity-legend" aria-label="Severity"></ul>
+          <div class="chart"></div>
+          <div class="table-wrap" hidden></div>
+        </figure>
+
+        <figure class="figure" data-toggle id="trend-flow">
+          <figcaption class="figure-head">
+            <h2>Found and fixed in each scan</h2>
+            <button type="button" class="link-button table-toggle" aria-pressed="false">Show as table</button>
+          </figcaption>
+          <ul class="legend" aria-label="Series">
+            <li><span class="swatch series-found"></span>Found (new and reopened)</li>
+            <li><span class="swatch series-fixed"></span>Fixed</li>
+          </ul>
+          <p class="figure-note" hidden>The first scan is left out: everything it found was new to the dashboard.</p>
+          <div class="chart"></div>
+          <div class="table-wrap" hidden></div>
+        </figure>
+
+        <figure class="figure" data-toggle id="trend-risk">
+          <figcaption class="figure-head">
+            <h2>Total risk of open findings</h2>
+            <button type="button" class="link-button table-toggle" aria-pressed="false">Show as table</button>
+          </figcaption>
+          <p class="figure-note">The sum of every open finding's risk score after each scan, using today's threat intel.</p>
+          <div class="chart"></div>
+          <div class="table-wrap" hidden></div>
+        </figure>
+
+        <div class="figure-stack">
+          <figure class="figure" id="trend-fix">
+            <figcaption>
+              <h2>Days to fix</h2>
+              <p class="figure-note">Median days from first seen to fixed, for findings fixed in this range.</p>
+            </figcaption>
+            <div class="hbars" id="fix-bars"></div>
+          </figure>
+          <figure class="figure" id="trend-age">
+            <figcaption>
+              <h2>How long open findings have been open</h2>
+            </figcaption>
+            <div class="age-bars" id="age-bars"></div>
+          </figure>
+        </div>
+      </div>
+
+      <section aria-labelledby="host-trend-heading">
+        <h2 id="host-trend-heading">Hosts over the range</h2>
+        <div class="table-wrap">
+          <table id="host-trend-table" class="data">
+            <thead>
+              <tr>
+                <th scope="col">Host</th>
+                <th scope="col">Open findings after each scan</th>
+                <th scope="col" class="num">At start</th>
+                <th scope="col" class="num">Now</th>
+                <th scope="col" class="num">Change</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===================== Scans ===================== -->
+    <div id="view-scans" class="view" hidden>
+      <section class="panel" id="openvas-panel" aria-labelledby="openvas-heading">
+        <div class="panel-head">
+          <div>
+            <h2 id="openvas-heading">OpenVAS</h2>
+            <p id="ov-status" class="status-line"></p>
+          </div>
+          <div class="button-row">
+            <a id="ov-web" class="button" target="_blank" rel="noopener noreferrer" hidden>Open Greenbone</a>
+            <button id="ov-sync" type="button" class="button" hidden>Sync now</button>
+            <button id="ov-new" type="button" class="button primary" hidden>New scan</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="ov-tasks-wrap" hidden>
+          <table id="ov-tasks" class="data">
+            <thead>
+              <tr>
+                <th scope="col">Task</th>
+                <th scope="col" class="hide-narrow">Targets</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="hide-narrow">Schedule</th>
+                <th scope="col">Last report</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="history-heading">
+        <h2 id="history-heading">Scan history</h2>
+        <p class="muted section-note">Every report the dashboard has imported, newest first. Open one to see what it changed.</p>
+        <div class="table-wrap">
+          <table id="history-table" class="data">
+            <thead>
+              <tr>
+                <th scope="col">Scan</th>
+                <th scope="col" class="hide-narrow">Source</th>
+                <th scope="col" class="num">Hosts</th>
+                <th scope="col" class="num">New</th>
+                <th scope="col" class="num">Fixed</th>
+                <th scope="col" class="num hide-narrow">Reopened</th>
+                <th scope="col">Open after</th>
+                <th scope="col"><span class="visually-hidden">Report</span></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </main>
 
   <dialog id="detail" class="sheet" aria-labelledby="detail-title">
     <div class="sheet-head">
-      <h2 id="detail-title"></h2>
+      <div>
+        <h2 id="detail-title"></h2>
+        <p id="detail-subtitle" class="muted"></p>
+      </div>
       <button id="detail-close" type="button" class="button">Close</button>
     </div>
     <div id="detail-body" class="sheet-body"></div>
+  </dialog>
+
+  <dialog id="new-scan" class="modal" aria-labelledby="new-scan-title">
+    <form id="new-scan-form" method="dialog" class="modal-form">
+      <h2 id="new-scan-title">New OpenVAS scan</h2>
+      <label class="field">Name
+        <input name="name" type="text" maxlength="80" required value="Home network">
+      </label>
+      <label class="field">What to scan
+        <textarea name="targets" rows="3" maxlength="2000" required placeholder="192.168.1.0/24"></textarea>
+        <span class="hint">IP addresses, networks such as 192.168.1.0/24, ranges such as
+          192.168.1.10-50, or local names such as nas.local. Private networks only. Scan only
+          networks you own.</span>
+      </label>
+      <label class="check-field">
+        <input name="consider_alive" type="checkbox" checked>
+        <span>Scan devices that do not answer ping<span class="hint">Slower, but Windows PCs
+          ignore ping by default and would otherwise be skipped.</span></span>
+      </label>
+      <fieldset class="field">
+        <legend>When</legend>
+        <label class="radio"><input type="radio" name="repeat" value="none" checked> Now, once</label>
+        <label class="radio"><input type="radio" name="repeat" value="daily"> Every day</label>
+        <label class="radio"><input type="radio" name="repeat" value="weekly"> Every week</label>
+      </fieldset>
+      <label class="field" id="start-field" hidden>First run
+        <input name="start_at" type="datetime-local">
+      </label>
+      <p id="new-scan-error" class="warn" hidden></p>
+      <div class="button-row end">
+        <button type="button" class="button" id="new-scan-cancel">Cancel</button>
+        <button type="submit" class="button primary" id="new-scan-submit">Start scan</button>
+      </div>
+    </form>
   </dialog>
 
   <div id="tooltip" class="tooltip" role="tooltip" hidden></div>

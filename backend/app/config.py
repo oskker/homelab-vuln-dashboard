@@ -1,6 +1,6 @@
 """Runtime settings. Every value can be overridden with an environment variable."""
 
-from pydantic import field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # Host headers the app will answer to. Blocks DNS-rebinding attacks on a local tool.
     allowed_hosts: str = "localhost,127.0.0.1"
 
+    # Largest scan report accepted, by upload or from OpenVAS.
     max_upload_mb: int = 200
 
     # Swagger UI at /api/docs. Off by default because it pulls scripts from a CDN.
@@ -30,12 +31,35 @@ class Settings(BaseSettings):
     ollama_model: str = ""
     ai_timeout_seconds: float = 180.0
 
+    # OpenVAS (Greenbone Community Edition). Empty socket path means not connected;
+    # reports can still be imported by hand.
+    openvas_socket: str = ""
+    openvas_username: str = "admin"
+    openvas_password: SecretStr = SecretStr("")
+    # How often finished reports are pulled in. 0 turns the automatic sync off.
+    openvas_sync_minutes: int = Field(default=10, ge=0, le=1440)
+    # Results below this quality of detection are ignored (Greenbone's default is 70).
+    openvas_min_qod: int = Field(default=70, ge=0, le=100)
+    openvas_timeout_seconds: float = 300.0
+    # Scans created from the dashboard may only target private networks unless this is on.
+    openvas_allow_public_targets: bool = False
+    # Where the Greenbone web interface is, for the link in the dashboard.
+    openvas_web_url: str = "https://127.0.0.1"
+
     @field_validator("ai_provider")
     @classmethod
     def _known_provider(cls, value: str) -> str:
         value = value.strip().lower()
         if value not in {"none", "ollama"}:
             raise ValueError("AI_PROVIDER must be 'none' or 'ollama'")
+        return value
+
+    @field_validator("openvas_web_url")
+    @classmethod
+    def _http_url(cls, value: str) -> str:
+        value = value.strip()
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("OPENVAS_WEB_URL must start with http:// or https://")
         return value
 
     @property

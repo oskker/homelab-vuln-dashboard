@@ -8,7 +8,8 @@ that proves it wherever one exists.
 
 | Asset | Why it matters |
 |---|---|
-| Scan results | A map of every weakness on the network. Exactly what an attacker wants. |
+| Scan results and their history | A map of every weakness on the network, and how long each one has been there. Exactly what an attacker wants. |
+| The OpenVAS manager | It can start scans. Whoever controls it can point a scanner at any address. |
 | The computer running the dashboard | It sits inside the network and holds the data above. |
 | The decisions the owner makes | If the ranking or the AI advice can be manipulated, real problems get ignored. |
 
@@ -16,8 +17,10 @@ that proves it wherever one exists.
 
 ```mermaid
 flowchart LR
-    devices["Scanned devices<br/>(untrusted)"] -->|banners, hostnames| scanner["Nessus"]
-    scanner -->|.nessus export or HTML report| parser["Parsers<br/>(defusedxml, html.parser)"]
+    devices["Scanned devices<br/>(untrusted)"] -->|banners, hostnames| scanner["OpenVAS<br/>(gvmd)"]
+    scanner <-->|"GMP over a Unix socket<br/>(no network port)"| sync["GMP client"]
+    sync --> parser["Parsers<br/>(defusedxml, html.parser)"]
+    files["Reports imported by hand<br/>(untrusted files)"] --> parser
     parser --> db[("PostgreSQL")]
     feeds["CISA KEV and FIRST EPSS<br/>(public feeds)"] -->|CVE intel| db
     db --> score["Risk score<br/>(plain code)"]
@@ -31,9 +34,11 @@ flowchart LR
 Three things are treated as untrusted even though they sit "inside" the system:
 
 1. **Scan content.** A device controls its own banners, hostnames and service
-   replies. Those strings travel through the scanner into the export file.
+   replies. Those strings travel through the scanner into the report.
 2. **The scan file itself.** It is XML or HTML from disk and could be crafted.
-3. **Model output.** A language model can be wrong, and it can be steered by the
+3. **Replies from OpenVAS.** gvmd is a local service, but its replies carry scan
+   content, so they get the same parsing guards as a file.
+4. **Model output.** A language model can be wrong, and it can be steered by the
    text it reads.
 
 ## Threats and controls
@@ -51,6 +56,32 @@ Three things are treated as untrusted even though they sit "inside" the system:
 | Oversized fields in an HTML report | Decoded and parsed in chunks; every text buffer is capped | `test_long_output_is_capped` |
 | The wrong report template imported as if it were complete | The template is checked; summary and by-plugin reports are refused with instructions | `test_wrong_reports_get_a_clear_message` |
 | SQL injection through scan text or search | SQLAlchemy bound parameters everywhere; search wildcards escaped | `test_findings_are_ranked_and_filterable` |
+
+### The OpenVAS connection
+
+| Threat | Control | Test |
+|---|---|---|
+| Something on the network talks to the OpenVAS manager | GMP is only reachable through gvmd's Unix socket, shared between containers in a Docker volume. No GMP port is published. The Greenbone web interface is bound to `127.0.0.1` | n/a (Compose file) |
+| A scan name or target list adds its own GMP elements | Commands are built with ElementTree, which escapes every value; names are reduced to safe characters; targets must parse as IP addresses, networks, ranges or host names | `test_create_scan_starts_it_with_escaped_values`, `test_bad_targets_are_refused` |
+| The dashboard is used to scan someone else's network | Scans created from the dashboard may only target private, link-local and loopback addresses and local host names, and at most 4,096 addresses, unless `OPENVAS_ALLOW_PUBLIC_TARGETS` is set | `test_create_scan_refuses_public_targets`, `test_private_targets_are_accepted` |
+| A GMP reply carries a DTD, entities or an endless body | Replies are read with defusedxml and capped at the upload size limit | `test_reply_with_a_dtd_is_refused`, `test_reply_size_is_capped` |
+| A reply split at an unlucky point is never recognised as complete, hanging the sync | The reader flushes Expat's deferred tokens after each chunk; tests split replies inside tags | `test_reply_read_in_pieces_and_status_checked` |
+| The OpenVAS password leaks | Kept in `.env` (git-ignored) and in a secret settings field; never logged, never returned by the API | `test_status_never_exposes_the_password` |
+| A broken report blocks every later import | It is skipped, reported once, and the sync carries on | `test_sync_skips_a_broken_report_and_keeps_going` |
+
+### Trustworthy history
+
+A vulnerability dashboard that marks things fixed when they are not is worse than none.
+
+| Threat | Control | Test |
+|---|---|---|
+| A stopped or interrupted scan closes every finding it did not reach | Only reports with the status Done are imported, by sync or by hand | `test_unfinished_scan_is_refused` |
+| A host the scanner did not finish has its findings closed | Its open findings are kept open and recorded as carried forward | `test_an_unfinished_host_keeps_its_findings_open` |
+| A check that timed out closes its finding | Errored checks are read from the report; their findings stay open | `test_a_check_that_errored_does_not_count_as_fixed` |
+| The same report is imported twice and distorts the trend | Each report is recognised by its file hash and by its OpenVAS report ID | `test_sync_imports_finished_reports_oldest_first_and_once` |
+| Reports imported out of order rewrite history | Older reports never change current state, and trends are rebuilt from what each scan saw | `test_reports_imported_out_of_order_give_the_same_trend` |
+| The original evidence is lost | Each report is stored compressed alongside the scan and can be downloaded; `backup.bat` exports everything | `test_original_report_can_be_downloaded` |
+| A stored report is opened in the browser and its markup runs | Downloads are sent as `application/octet-stream` attachments, never rendered | `test_original_report_can_be_downloaded` |
 
 ### Prompt injection through scan data
 
@@ -81,10 +112,10 @@ status or a ranking.
 
 | Threat | Control | Test |
 |---|---|---|
-| Scan data sent to a cloud AI service | The default provider is a local model through Ollama. There is no cloud provider in v0.1 | `test_provider_selection` |
+| Scan data sent to a cloud AI service | The default provider is a local model through Ollama. There is no cloud provider | `test_provider_selection` |
 | Host details leak through threat-intel lookups | Only well-formed CVE IDs are sent to EPSS. The KEV feed is downloaded whole, so CISA learns nothing about what you have | `test_refresh_updates_findings_and_sends_only_cve_ids` |
 | The page calls third parties (fonts, CDNs, analytics) | No external assets at all; CSP `default-src 'self'` | `test_page_makes_no_third_party_requests` |
-| A real scan is committed to a public repository | `.gitignore` excludes `*.nessus` except the synthetic demo files | n/a |
+| A real scan or a backup is committed to a public repository | `.gitignore` excludes `*.xml`, `*.nessus`, `*.html`, `backups/` and `*.dump`, except the synthetic demo files | n/a |
 
 ### Attacks from the browser
 
@@ -102,20 +133,30 @@ The dashboard has no login, so it must only ever answer the person at this compu
 | Threat | Control |
 |---|---|
 | Code execution inside the app container | Non-root user, read-only root filesystem, all Linux capabilities dropped, `no-new-privileges` |
+| A schema change corrupts existing data | Alembic migrations, tested on SQLite and PostgreSQL, including an upgrade of a version 0.1 database |
 | Outdated dependencies | Pinned versions, Dependabot for pip, Docker and Actions |
 | Vulnerable code patterns | CodeQL on every push; Ruff security rules in CI |
 
 ## Known gaps
 
-These are deliberate limits of v0.1, not oversights:
+These are deliberate limits of this version, not oversights:
 
 - **No authentication.** Anyone with a session on this computer can use the dashboard.
-- **Data at rest is not encrypted.** Scan data sits in a Docker volume. Use full-disk
-  encryption (BitLocker) on the host.
-- **"Not reported" is treated as "fixed".** If a later scan uses a different policy or
-  cannot reach a port, a finding can be closed wrongly.
+- **Data at rest is not encrypted.** Scan data and stored reports sit in a Docker
+  volume, and backups in the `backups` folder. Use full-disk encryption (BitLocker) on
+  the host.
+- **The scanner container is privileged on the network.** OpenVAS needs raw sockets, so
+  Greenbone's compose file gives it `NET_ADMIN` and `NET_RAW` and turns off its seccomp
+  and AppArmor profiles. That is upstream's requirement and is left as it is.
+- **The dashboard uses the OpenVAS `admin` account.** A dedicated GMP user with only the
+  rights it needs would be tighter.
+- **The OpenVAS password is stored in plain text** in `.env`, like the database password.
+- **"Not reported" is treated as "fixed"** unless the scan says it could not check. If a
+  later scan uses a different configuration or cannot reach a port, a finding can still
+  be closed wrongly.
 - **Prompt injection is contained, not solved.** The fence makes steering the model
   harder; it does not make it impossible. That is why the model has no authority.
 - **Ollama is trusted as a local service.** The app talks to it over plain HTTP on the
   same machine.
-- **Scan times are scanner-local.** Ages can be off by a few hours across time zones.
+- **Nessus HTML reports have no time zone.** Their times are read as UTC, so ages can be
+  off by a few hours. OpenVAS reports and `.nessus` exports carry exact times.

@@ -9,13 +9,14 @@ Only CVE IDs leave the machine (in the EPSS query). No host or scan data is sent
 import re
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 
 import httpx2
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import Settings
+from .db import utcnow
 from .models import CveIntel, FindingCve
 from .risk import recompute_risk
 
@@ -148,7 +149,7 @@ def refresh_intel(db: Session, settings: Settings, client: httpx2.Client | None 
     if kev is None and epss is None:
         raise IntelError(" ".join(warnings))
 
-    now = datetime.now()  # noqa: DTZ005
+    now = utcnow()
     existing = {row.cve_id: row for row in db.scalars(select(CveIntel)).all()}
     for cve in cves:
         row = existing.get(cve)

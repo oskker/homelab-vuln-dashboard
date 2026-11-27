@@ -48,16 +48,19 @@ def _to_score(value: str | None) -> float | None:
 
 
 def _parse_time(text: str | None, epoch: str | None = None) -> datetime | None:
-    """Nessus writes host times in the scanner's local time, without a zone."""
-    if text:
-        try:
-            return datetime.strptime(text.strip(), NESSUS_TIME_FORMAT)  # noqa: DTZ007
-        except ValueError:
-            pass
+    """Prefer the epoch timestamp, which is UTC like every time the app stores.
+
+    The text form is in the scanner's local time without a zone, so it is only a fallback.
+    """
     if epoch:
         try:
             return datetime.fromtimestamp(int(epoch), tz=UTC).replace(tzinfo=None)
         except (ValueError, OverflowError, OSError):
+            pass
+    if text:
+        try:
+            return datetime.strptime(text.strip(), NESSUS_TIME_FORMAT)  # noqa: DTZ007
+        except ValueError:
             pass
     return None
 

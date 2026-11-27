@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.config import Settings
 from app.db import Base, make_engine
@@ -11,7 +12,9 @@ from app.main import create_app
 from app.parsers import ParsedFinding, ParsedHost, ParsedScan
 
 SAMPLES = Path(__file__).resolve().parents[2] / "sample-data"
-DEMO_SCANS = sorted(SAMPLES.glob("demo-scan-*.nessus"))
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+OPENVAS_DEMOS = sorted(SAMPLES.glob("openvas-demo-*.xml"))
+DEMO_SCANS = sorted((FIXTURES / "nessus").glob("demo-scan-*.nessus"))  # Nessus fixtures
 WRITE = {"X-Requested-With": "vulndash"}
 
 
@@ -34,6 +37,8 @@ def clean_database():
     if not TEST_DATABASE_URL.startswith("sqlite"):
         engine = make_engine(TEST_DATABASE_URL)
         Base.metadata.drop_all(engine)
+        with engine.begin() as connection:
+            connection.execute(text("DROP TABLE IF EXISTS alembic_version"))
         engine.dispose()
 
 
@@ -68,8 +73,17 @@ def upload_bytes(client: TestClient, data: bytes, name: str = "scan.nessus"):
 
 @pytest.fixture
 def loaded(client):
-    """A client with the three demo scans imported, oldest first."""
+    """A client with the three Nessus fixture scans imported, oldest first."""
     for path in DEMO_SCANS:
+        response = upload(client, path)
+        assert response.status_code == 201, response.text
+    return client
+
+
+@pytest.fixture
+def openvas_loaded(client):
+    """A client with the eight OpenVAS demo reports imported, oldest first."""
+    for path in OPENVAS_DEMOS:
         response = upload(client, path)
         assert response.status_code == 201, response.text
     return client
