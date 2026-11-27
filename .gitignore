@@ -4,7 +4,7 @@
 # Real scan exports and reports describe your network. Only the synthetic demo files
 # and the dashboard's own page belong in git.
 *.nessus
-!sample-data/demo-scan-*.nessus
+!backend/tests/fixtures/nessus/demo-scan-*.nessus
 *.html
 *.htm
 !backend/app/static/*.html
@@ -26,3 +26,9 @@ __pycache__/
 .idea/
 Thumbs.db
 .DS_Store
+
+# OpenVAS reports exported by hand, and database backups: both describe your network.
+*.xml
+!sample-data/openvas-demo-*.xml
+backups/
+*.dump
