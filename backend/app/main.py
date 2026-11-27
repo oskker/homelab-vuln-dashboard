@@ -45,7 +45,7 @@ from .models import (
     Scan,
     ScanArchive,
 )
-from .openvas import OpenVasError, OpenVasNotConfigured, OpenVasService
+from .openvas import OpenVasError, OpenVasNotConfigured, OpenVasService, public_error
 from .parsers import NessusHtmlParser, ScanParseError, parse_scan
 from .risk import SEVERITY_LABELS, recompute_risk, score_finding
 
@@ -237,7 +237,8 @@ def _openvas_call(action):
     except OpenVasError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GmpError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        log.warning("OpenVAS request failed: %s", exc)
+        raise HTTPException(status_code=502, detail=public_error(exc)) from exc
 
 
 api = APIRouter(prefix="/api")

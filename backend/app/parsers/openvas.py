@@ -40,10 +40,7 @@ DEFAULT_MIN_QOD = 70
 CVE_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$")
 PORT_PATTERN = re.compile(r"^\s*(\d{1,5})/([A-Za-z0-9-]+)")
 GENERAL_PORT_PATTERN = re.compile(r"^\s*general/([A-Za-z0-9-]+)")
-SNIFF_PATTERN = re.compile(
-    rb"^\s*(?:<\?xml[^>]*\?>\s*)?(?:<!--.*?-->\s*)*<(report|get_reports_response)[\s>/]",
-    re.DOTALL,
-)
+ROOT_START = re.compile(rb"<(?:report|get_reports_response)[\s>/]")
 SKIPPED_THREATS = {"log", "debug", "false positive", "error"}
 
 MAX_SHORT = 255
@@ -192,8 +189,24 @@ class OpenVasParser:
 
     @staticmethod
     def looks_like(head: bytes) -> bool:
-        """True when the file starts like an OpenVAS XML report."""
-        return SNIFF_PATTERN.match(head) is not None
+        """True when the file starts like an OpenVAS XML report.
+
+        Skips an XML declaration and any comments with plain string searches, so the
+        check takes linear time whatever the file contains. (A single regular
+        expression for this can backtrack exponentially on a crafted file.)
+        """
+        text = head.lstrip()
+        if text.startswith(b"<?xml"):
+            end = text.find(b"?>")
+            if end == -1:
+                return False
+            text = text[end + 2 :].lstrip()
+        while text.startswith(b"<!--"):
+            end = text.find(b"-->", 4)
+            if end == -1:
+                return False
+            text = text[end + 3 :].lstrip()
+        return ROOT_START.match(text) is not None
 
     # ---------- One result ----------
 

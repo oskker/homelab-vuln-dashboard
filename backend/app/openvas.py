@@ -14,6 +14,7 @@ Guardrails:
 
 import hashlib
 import ipaddress
+import logging
 import re
 import threading
 import uuid
@@ -27,7 +28,15 @@ from sqlalchemy.orm import Session
 
 from .config import Settings
 from .db import utcnow
-from .gmp import GmpCommandError, GmpConnection, GmpError, child, element
+from .gmp import (
+    GmpAuthError,
+    GmpCommandError,
+    GmpConnection,
+    GmpConnectionError,
+    GmpError,
+    child,
+    element,
+)
 from .importer import DuplicateScanError, import_scan
 from .models import ORIGIN_SYNC, Scan
 from .parsers import ScanParseError
@@ -53,12 +62,43 @@ TIMEZONE = re.compile(r"^[A-Za-z]+(?:[/_+-][A-Za-z0-9]+){0,4}$")
 SAFE_NAME = re.compile(r"[^\w .,()'@#+-]")
 
 
+log = logging.getLogger("vulndash.openvas")
+
+NOT_CONFIGURED = (
+    "OpenVAS is not connected. Run start.bat to start it with the dashboard, or import "
+    "OpenVAS XML reports by hand."
+)
+NOT_REACHABLE = (
+    "OpenVAS is not answering yet. It takes several minutes to start; the dashboard "
+    "connects on its own."
+)
+AUTH_FAILED = (
+    "OpenVAS rejected the user name or password set in OPENVAS_USERNAME and OPENVAS_PASSWORD."
+)
+REFUSED = "OpenVAS refused the request. The app log has the details."
+UNUSABLE = "OpenVAS sent a reply the dashboard could not use. The app log has the details."
+
+
 class OpenVasError(RuntimeError):
-    """Shown to the user as is."""
+    """Raised with a message written for the user."""
 
 
 class OpenVasNotConfigured(OpenVasError):
     pass
+
+
+def public_error(exc: Exception) -> str:
+    """A fixed message for the user. Exception text, which can carry internal detail,
+    goes to the log instead of into API replies."""
+    if isinstance(exc, OpenVasNotConfigured):
+        return NOT_CONFIGURED
+    if isinstance(exc, GmpAuthError):
+        return AUTH_FAILED
+    if isinstance(exc, GmpConnectionError):
+        return NOT_REACHABLE
+    if isinstance(exc, GmpCommandError):
+        return REFUSED
+    return UNUSABLE
 
 
 # ---------- Target validation ----------
@@ -250,10 +290,7 @@ class OpenVasService:
 
     def connect(self, timeout: float | None = None) -> GmpConnection:
         if not self.configured:
-            raise OpenVasNotConfigured(
-                "OpenVAS is not connected. Start the dashboard with start.bat to run "
-                "OpenVAS alongside it, or import XML reports by hand."
-            )
+            raise OpenVasNotConfigured(NOT_CONFIGURED)
         connection = GmpConnection(
             self.settings.openvas_socket,
             timeout=timeout or self.settings.openvas_timeout_seconds,
@@ -285,10 +322,7 @@ class OpenVasService:
             "min_qod": self.settings.openvas_min_qod,
         }
         if not self.configured:
-            info["message"] = (
-                "OpenVAS is not connected. Run start.bat to start it with the dashboard, or "
-                "import OpenVAS XML reports by hand."
-            )
+            info["message"] = NOT_CONFIGURED
             return info
         try:
             with self.connect(timeout=STATUS_TIMEOUT) as gmp:
@@ -305,9 +339,8 @@ class OpenVasService:
                     "30 minutes or more; scans can start when it finishes."
                 )
         except GmpError as exc:
-            info["message"] = (
-                f"{exc} OpenVAS takes several minutes to start; it will connect on its own."
-            )
+            log.info("OpenVAS status check failed: %s", exc)
+            info["message"] = public_error(exc)
         return info
 
     def tasks(self) -> list[dict]:
@@ -492,7 +525,16 @@ class OpenVasService:
                 except (ScanParseError, GmpCommandError) as exc:
                     db.rollback()
                     self._failed_reports.add(report["id"])
-                    result.errors.append(f"Report {report['id'][:8]}: {exc}")
+                    log.warning("OpenVAS report %s was not imported: %s", report["id"], exc)
+                    reason = (
+                        "OpenVAS refused to send it"
+                        if isinstance(exc, GmpCommandError)
+                        else "it could not be read as a finished OpenVAS report"
+                    )
+                    result.errors.append(
+                        f"Report {report['id'][:8]} was not imported: {reason}. "
+                        "The app log has the details."
+                    )
                     continue
                 result.imported.append(
                     {
@@ -516,8 +558,9 @@ class OpenVasService:
                 outcome["error"] = None
             except (GmpError, OpenVasError) as exc:
                 db.rollback()
+                log.warning("OpenVAS sync failed: %s", exc)
                 outcome = SyncResult().as_dict()
-                outcome["error"] = str(exc)
+                outcome["error"] = public_error(exc)
             outcome["at"] = utcnow()
             self.last_sync = outcome
             return outcome

@@ -221,6 +221,32 @@ def test_wrapped_text_is_tidied():
     assert tidy(text) == "Multiple flaws exist due to:\n- first item\n- second item\n\nLast paragraph."
 
 
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        (b'<?xml version="1.0"?>\n<!-- a -->\n<!-- b -->\n<report id="x">', True),
+        (b"  <get_reports_response status='200'>", True),
+        (b"<report/>", True),
+        (b"<reports>", False),
+        (b"<!-- never closed <report>", False),
+        (b"<?xml version='1.0'", False),
+        (b"<NessusClientData_v2>", False),
+    ],
+)
+def test_sniffing_recognises_openvas_reports(head, expected):
+    assert OpenVasParser.looks_like(head) is expected
+
+
+def test_sniffing_takes_linear_time_on_hostile_input():
+    """A crafted start of file once made the old regular expression backtrack for ages."""
+    import time
+
+    for head in (b"<!--" * 1024, b"<!---->" * 585, b"<!-- " + b"-" * 4090):
+        started = time.perf_counter()
+        assert OpenVasParser.looks_like(head) is False
+        assert time.perf_counter() - started < 0.05
+
+
 def test_format_is_detected_from_the_first_bytes():
     with OPENVAS_DEMOS[0].open("rb") as handle:
         assert parse_scan(handle).source == "openvas"

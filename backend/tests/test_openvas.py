@@ -107,6 +107,19 @@ def test_status_never_exposes_the_password(ov_client):
     assert "secret" not in ov_client.get("/api/openvas/status").text
 
 
+def test_status_when_openvas_is_not_up_yet(tmp_path):
+    app = create_app(
+        make_settings(openvas_socket=str(tmp_path / "missing.sock"), openvas_sync_minutes=0)
+    )
+    with TestClient(app) as client:
+        status = client.get("/api/openvas/status").json()
+        assert status["connected"] is False
+        assert "not answering yet" in status["message"]
+        assert "missing.sock" not in status["message"] and "Errno" not in status["message"]
+        sync = client.post("/api/openvas/sync", headers=WRITE)
+        assert sync.status_code == 502 and "not answering yet" in sync.json()["detail"]
+
+
 def test_bad_password_shows_in_status_not_as_a_crash(gvmd):
     app = create_app(make_settings(openvas_socket=gvmd.path, openvas_password="nope", openvas_sync_minutes=0))
     with TestClient(app) as client:
@@ -179,7 +192,9 @@ def test_sync_skips_a_broken_report_and_keeps_going(ov_client, gvmd):
     outcome = ov_client.post("/api/openvas/sync", headers=WRITE).json()
 
     assert len(outcome["imported"]) == 1
-    assert len(outcome["errors"]) == 1 and "no results section" in outcome["errors"][0]
+    assert len(outcome["errors"]) == 1
+    assert "could not be read" in outcome["errors"][0]
+    assert "results section" not in outcome["errors"][0]  # the detail goes to the log only
 
 
 def test_background_sync_records_its_outcome(ov_app, ov_client, gvmd):
