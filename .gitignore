@@ -1,9 +1,13 @@
 # Secrets and local settings: never commit these
 .env
 
-# Real scan exports describe your network. Only the synthetic demo files belong in git.
+# Real scan exports and reports describe your network. Only the synthetic demo files
+# and the dashboard's own page belong in git.
 *.nessus
 !sample-data/demo-scan-*.nessus
+*.html
+*.htm
+!backend/app/static/*.html
 scans/
 
 # Python

@@ -28,7 +28,7 @@ from .db import Base, make_engine
 from .enrichment import IntelError, refresh_intel
 from .importer import DuplicateScanError, import_scan
 from .models import STATUS_FIXED, STATUS_OPEN, AiTriage, CveIntel, Finding, FindingCve, Host, Scan
-from .parsers import NessusParser, ScanParseError
+from .parsers import ScanParseError, parse_scan
 from .risk import SEVERITY_LABELS, recompute_risk, score_finding
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -238,7 +238,7 @@ def upload_scan(
             raise HTTPException(status_code=400, detail="The file is empty.")
         buffer.seek(0)
         try:
-            parsed = NessusParser().parse(buffer)
+            parsed = parse_scan(buffer)
         except ScanParseError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

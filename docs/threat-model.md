@@ -17,7 +17,7 @@ that proves it wherever one exists.
 ```mermaid
 flowchart LR
     devices["Scanned devices<br/>(untrusted)"] -->|banners, hostnames| scanner["Nessus"]
-    scanner -->|.nessus export| parser["Parser<br/>(defusedxml)"]
+    scanner -->|.nessus export or HTML report| parser["Parsers<br/>(defusedxml, html.parser)"]
     parser --> db[("PostgreSQL")]
     feeds["CISA KEV and FIRST EPSS<br/>(public feeds)"] -->|CVE intel| db
     db --> score["Risk score<br/>(plain code)"]
@@ -32,7 +32,7 @@ Three things are treated as untrusted even though they sit "inside" the system:
 
 1. **Scan content.** A device controls its own banners, hostnames and service
    replies. Those strings travel through the scanner into the export file.
-2. **The scan file itself.** It is XML from disk and could be crafted.
+2. **The scan file itself.** It is XML or HTML from disk and could be crafted.
 3. **Model output.** A language model can be wrong, and it can be steered by the
    text it reads.
 
@@ -47,6 +47,9 @@ Three things are treated as untrusted even though they sit "inside" the system:
 | Huge file exhausts memory or disk | Size limit checked before the body is read and again while reading; streamed parse that frees each host | `test_upload_size_limit` |
 | Oversized or malformed fields | Length caps, range clamps, strict CVE pattern | `test_cleans_untrusted_values` |
 | Path tricks in the upload name | Name is reduced to a safe base name and never used as a path | `test_uploaded_filename_is_sanitised` |
+| Hostile markup in an HTML report | Read with the standard library's tokenising `html.parser`: no scripts run, nothing is fetched, and only text is kept | `test_markup_in_scanner_output_stays_text` |
+| Oversized fields in an HTML report | Decoded and parsed in chunks; every text buffer is capped | `test_long_output_is_capped` |
+| The wrong report template imported as if it were complete | The template is checked; summary and by-plugin reports are refused with instructions | `test_wrong_reports_get_a_clear_message` |
 | SQL injection through scan text or search | SQLAlchemy bound parameters everywhere; search wildcards escaped | `test_findings_are_ranked_and_filterable` |
 
 ### Prompt injection through scan data

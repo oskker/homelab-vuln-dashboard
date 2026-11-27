@@ -110,7 +110,8 @@ main section, .figures { margin-top: 36px; }
 main section > h2 { margin-bottom: 12px; }
 
 .empty { max-width: 60ch; padding: 48px 0; }
-.empty p { margin: 8px 0 20px; color: var(--ink-2); }
+.empty p { margin: 8px 0 0; color: var(--ink-2); }
+.empty p:last-of-type { margin-bottom: 20px; }
 
 /* Stat strip: one row split by hairlines, not separate cards */
 .stats { margin-top: 0; border-bottom: 1px solid var(--hairline); }

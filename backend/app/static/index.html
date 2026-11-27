@@ -14,7 +14,7 @@
       <p id="scan-meta" class="muted">Loading</p>
     </div>
     <div class="topbar-actions">
-      <input id="scan-file" type="file" accept=".nessus,.xml" hidden>
+      <input id="scan-file" type="file" accept=".nessus,.xml,.html,.htm" hidden>
       <button id="import-button" type="button" class="button primary">Import scan</button>
       <button id="intel-button" type="button" class="button">Update threat intel</button>
     </div>
@@ -25,9 +25,11 @@
   <main>
     <section id="empty-state" class="empty" hidden>
       <h2>No scans yet</h2>
-      <p>Export a scan from Nessus (open the scan, choose Export, then Nessus) and import the
-        .nessus file here. To try the dashboard first, import the two files in the
-        <code>sample-data</code> folder, oldest first.</p>
+      <p>In Nessus Essentials or Essentials Plus, open a finished scan, choose Report, pick
+        the Detailed Vulnerabilities By Host template and import the HTML file here. With
+        Nessus Professional you can import the .nessus export instead.</p>
+      <p>To try the dashboard first, import the three files in the <code>sample-data</code>
+        folder, oldest first.</p>
       <button id="empty-import" type="button" class="button primary">Import scan</button>
     </section>
 
